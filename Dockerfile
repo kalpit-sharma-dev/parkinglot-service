@@ -21,7 +21,7 @@ RUN go get  github.com/cespare/reflex@v0.3.1
 
 RUN go get -d -v ./...
 
-
+ENTRYPOINT [ "/go/app/parkinglot-service" ]
 CMD reflex -R "__debug_bin" -s -- bash -c "dlv debug --headless --continue --accept-multiclient --listen :40000 --api-version=2 --log ./src/"
 
 FROM dev as build
