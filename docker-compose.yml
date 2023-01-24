@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  server: 
+    image: parkinglot-service:debug
+    env_file: .env
+    build:
+      context: .
+      dockerfile: Dockerfile 
+      target: debug
+    ports:
+      - 9999:9999
+      - 40000:40000
+    security_opt: 
+      - seccomp:unconfined
