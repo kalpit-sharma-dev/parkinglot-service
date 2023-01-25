@@ -1,0 +1,160 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Swagger Parking Lot
+servers:
+  - url: http://localhost:9999/parkinglot-service/api
+paths:
+  /parking/vehicle/park:
+    post:
+      summary: Park the Car in Slot
+      operationId: ParCar
+      tags:
+        - parking
+      requestBody: 
+        description: Park Car Request
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetAllCars'  
+      responses:
+        201:
+          description: Park Car 
+          content:
+            application/json:    
+              schema:
+                $ref: "#/components/schemas/GetAllCars"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error" 
+  /parking/vehicle/exit:
+    get:
+      summary: Get Car Based on Number
+      operationId: getcarbasedonnumber
+      tags:
+        - parking
+      parameters: 
+        - name: number
+          in: query
+          description: Get Car Based on Number
+          schema:
+            type: string    
+      responses:
+        200:
+          description: Get Car Based on Number
+          content:
+            application/json:    
+              schema:
+                $ref: "#/components/schemas/GetAllCars"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /parking/cars:
+    get:
+      summary: Exit the Parking
+      operationId: exitparking
+      tags:
+        - parking
+      parameters: 
+        - name: number
+          in: query
+          description: Exit Based on number
+          schema:
+            type: string    
+      responses:
+        200:
+          description: Exit Based on number
+          content:
+            application/json:    
+              schema:
+                $ref: "#/components/schemas/GetAllCars"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /parking/slots:
+    get:
+      summary: Get All Slot Number With Color
+      operationId: getallslotnumberwithcolor
+      tags:
+        - slot
+      parameters:
+        - name: color
+          in: query
+          description: Records Based on color
+          schema:
+            type: string  
+        - name: number
+          in: query
+          description: Records Based on number
+          schema:
+            type: string    
+      responses:
+        200:
+          description: Get All Slot Number With Color
+          content:
+            application/json:    
+              schema:
+                $ref: "#/components/schemas/GetAllCars"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create slot
+      operationId: Create Slot
+      tags:
+        - slot
+      requestBody: 
+        description: Slot Create Request
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSlot'  
+      responses:
+        201:
+          description: Created Slot
+          content:
+            application/json:    
+              schema:
+                $ref: "#/components/schemas/CreateSlot"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    GetAllCars:
+      properties:
+        slot:
+          type: string
+        number:
+          type: string  
+        color:
+          type: string
+    CreateSlot:
+      properties:
+        slotSize:
+          type: integer
+    Error:
+      required:
+        - id
+        - message
+      properties:
+        id:
+          type: integer
+          format: int32
+        message:
+          type: string
