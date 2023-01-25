@@ -18,8 +18,12 @@ func LoadRoute() {
 	registerAppRoutes(router)
 	log.Println("INFO : Router Loaded Successfully")
 	log.Println("INFO : Application is started Successfully")
+	// wg := &sync.WaitGroup{}
+	// go LoadSlots(wg)
 	http.ListenAndServe(":9999", router)
 }
+
+var SlotCounter uint64
 
 func registerAppRoutes(r *mux.Router) {
 	log.Println("INFO : Registering Router ")
@@ -27,8 +31,8 @@ func registerAppRoutes(r *mux.Router) {
 	log.Println("INFO : Registering Router ")
 
 	var dbConn db.DatabaseImpl
-	// /c, err := db.GetDatabaseProvider(DBConfig.DBUser, DBConfig.DBPassword, DBConfig.DBName)
-	vehicleDB := make([]db.Vehicles, 100000)
+
+	vehicleDB := make([]db.Vehicles, 1)
 	dbConn.DBObj = &vehicleDB
 
 	eventRepo := db.NewDatabaseRepository(dbConn.DBObj)
@@ -37,14 +41,14 @@ func registerAppRoutes(r *mux.Router) {
 
 	eventHandlers := handlers.NewHandler(eventService)
 
-	r.HandleFunc("/parking/slots", eventHandlers.HandleGetAllCarsWithColor).Methods(http.MethodPost)
+	r.HandleFunc("/parking/slots", eventHandlers.HandleCreateSlotEvent).Methods(http.MethodPost)
 
-	r.HandleFunc("/parking/cars", eventHandlers.HandleGetAllCarsWithColor).Methods(http.MethodPut)         //quer param color
-	r.HandleFunc("/parking/cars/{id}", eventHandlers.HandleGetSlotNumberWithCarID).Methods(http.MethodGet) //return slot number
-	r.HandleFunc("/parking/slots", eventHandlers.HandleGetAllSlotNumberWithColor).Methods(http.MethodGet)  ////quer param color return slot numbers
+	r.HandleFunc("/parking/cars", eventHandlers.HandleGetGovernmentAPI).Methods(http.MethodGet) //quer param color,number
+
+	r.HandleFunc("/parking/slots", eventHandlers.HandleGetAllSlotNumberWithColor).Methods(http.MethodGet) ////quer param color return slot numbers
 
 	r.HandleFunc("/parking/vehicle/park", eventHandlers.HandleCreateParkEvent).Methods(http.MethodPost)
-	r.HandleFunc("/parking/vehicle/exit", eventHandlers.HandleExitParkEvent).Methods(http.MethodPost)
+	r.HandleFunc("/parking/vehicle/exit", eventHandlers.HandleExitParkEvent).Methods(http.MethodGet)
 
 	// /r.HandleFunc("/parking/slots/status", eventHandlers.HandleCreateEvents).Methods(http.MethodPost)
 

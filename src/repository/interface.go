@@ -7,6 +7,7 @@ import (
 )
 
 type DatabaseRepository interface {
+	CreateSlotEvent(ctx context.Context, req models.Slot) (vehicle models.Slot, err error)
 	GetAllCarsWithColor(ctx context.Context, reqColor string) (vehicle []models.Vehicle, err error)
 	GetSlotNumberWithCarID(ctx context.Context, reqNumber string) (vehicle models.Vehicle, err error)
 	GetAllSlotNumberWithColor(ctx context.Context, reqColor string) (vehicle []models.Vehicle, err error)

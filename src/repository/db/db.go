@@ -3,19 +3,22 @@ package db
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/kalpit-sharma-dev/parkinglot-service/src/constants"
 	"github.com/kalpit-sharma-dev/parkinglot-service/src/models"
 	"github.com/kalpit-sharma-dev/parkinglot-service/src/repository"
 )
 
 //var Atom atomic.Int32
 
-var SlotSize chan int
+var SlotSize int
+
+var PeakHours map[string]int
 
 type Vehicles struct {
 	Color     string
@@ -24,9 +27,16 @@ type Vehicles struct {
 	CreatedAt time.Time
 }
 
-type Color map[string][]string
+var SlotDB map[string]Vehicles
+var EmptySlotDB map[string]string
 
-type Car map[string]Color
+func init() {
+
+	SlotDB = make(map[string]Vehicles)
+	EmptySlotDB = make(map[string]string)
+
+}
+
 type DatabaseImpl struct {
 	DBObj *[]Vehicles
 	RW    sync.RWMutex
@@ -34,10 +44,28 @@ type DatabaseImpl struct {
 	Month map[int]int ////key value pair for day and earning
 }
 
+func (db *DatabaseImpl) CreateSlotEvent(ctx context.Context, req models.Slot) (vehicle models.Slot, err error) {
+
+	db.RW.Lock()
+	oldSlotSize := SlotSize
+
+	SlotSize = req.SlotSize + SlotSize
+
+	vehicle.SlotSize = SlotSize
+	for i := oldSlotSize + 1; i <= SlotSize; i++ {
+		slot := strconv.Itoa(i)
+		EmptySlotDB[slot] = slot
+	}
+
+	db.RW.Unlock()
+
+	return
+}
+
 // CreateEvents implements repository.DatabaseRepository
 func (db *DatabaseImpl) GetAllCarsWithColor(ctx context.Context, reqColor string) (vehicle []models.Vehicle, err error) {
 
-	//db.RW.RLock()
+	db.RW.RLock()
 	for _, value := range *db.DBObj {
 		if value.Color == reqColor {
 			vehicle = append(vehicle, models.Vehicle{
@@ -48,12 +76,12 @@ func (db *DatabaseImpl) GetAllCarsWithColor(ctx context.Context, reqColor string
 			})
 		}
 	}
-	//db.RW.RUnlock()
+	db.RW.RUnlock()
 	return
 }
 
 func (db *DatabaseImpl) GetSlotNumberWithCarID(ctx context.Context, reqNumber string) (vehicle models.Vehicle, err error) {
-	//db.RW.RLock()
+	db.RW.RLock()
 	for _, value := range *db.DBObj {
 		if value.Number == reqNumber {
 			vehicle = models.Vehicle{
@@ -62,21 +90,23 @@ func (db *DatabaseImpl) GetSlotNumberWithCarID(ctx context.Context, reqNumber st
 				Color:  value.Color,
 				//CreatedAt: value.CreatedAt,
 			}
-			//db.RW.RUnlock()
+			db.RW.RUnlock()
 			return
 		}
 	}
 
 	if len(strings.TrimSpace(vehicle.Slot)) == 0 {
+		db.RW.RUnlock()
 		return models.Vehicle{}, errors.New("NO Vehicle Found for this ID")
 	}
+	db.RW.RUnlock()
 	return
 }
 
 // GetAllEvents implements repository.DatabaseRepository
 func (db *DatabaseImpl) GetAllSlotNumberWithColor(ctx context.Context, reqColor string) (vehicle []models.Vehicle, err error) {
 
-	//db.RW.RLock()
+	db.RW.RLock()
 	for _, value := range *db.DBObj {
 		if value.Color == reqColor {
 			vehicle = append(vehicle, models.Vehicle{
@@ -87,7 +117,7 @@ func (db *DatabaseImpl) GetAllSlotNumberWithColor(ctx context.Context, reqColor 
 			})
 		}
 	}
-	//db.RW.RUnlock()
+	db.RW.RUnlock()
 	return
 
 }
@@ -95,14 +125,23 @@ func (db *DatabaseImpl) GetAllSlotNumberWithColor(ctx context.Context, reqColor 
 func (db *DatabaseImpl) CreateParkEvent(ctx context.Context, req models.Vehicle) (vehicle models.Vehicle, err error) {
 
 	db.RW.Lock()
-	time.Sleep(4 * time.Second)
+	latestEmptySlot, err := fetchEmptySlot()
+
+	if err != nil {
+		db.RW.Unlock()
+		return vehicle, err
+
+	}
 	value := Vehicles{
 		Color:     req.Color,
 		Number:    req.Number,
-		Slot:      req.Slot,
+		Slot:      latestEmptySlot,
 		CreatedAt: time.Now(),
 	}
+
 	*db.DBObj = append(*db.DBObj, value)
+	SlotDB[latestEmptySlot] = value
+	delete(EmptySlotDB, latestEmptySlot)
 	db.RW.Unlock()
 	vehicle.Color = value.Color
 	vehicle.Number = value.Number
@@ -110,24 +149,26 @@ func (db *DatabaseImpl) CreateParkEvent(ctx context.Context, req models.Vehicle)
 	return
 }
 
-func (db *DatabaseImpl) ExitParkEvent(ctx context.Context, req models.Vehicle) (vehicle models.Vehicle, err error) {
+func (db *DatabaseImpl) ExitParkEvent(ctx context.Context, req models.Vehicle) (models.Vehicle, error) {
 
+	var vehicle models.Vehicle
 	db.RW.Lock()
-	for _, value := range *db.DBObj {
+	for index, value := range *db.DBObj {
 		if value.Number == req.Number {
-			slot, err := strconv.Atoi(value.Slot)
-			if err != nil {
-				log.Println("error exit for car number", req.Number, err)
-				return vehicle, err
-			}
-			remove(db.DBObj, slot-1)
+			delete(SlotDB, req.Slot)
+			addEmptySlot(req.Slot)
+			db.DBObj = remove(db.DBObj, index)
+			fmt.Println("###################", index, value)
+			vehicle.Color = value.Color
+			vehicle.Number = value.Number
+			vehicle.Slot = value.Slot
 			db.RW.Unlock()
-			return vehicle, err
+			return vehicle, nil
 		}
 	}
 	db.RW.Unlock()
-
-	return
+	err := errors.New(constants.NoCarParkedError)
+	return vehicle, err
 }
 
 // NewRepository returns instance of Database repository
@@ -136,6 +177,21 @@ func NewDatabaseRepository(db *[]Vehicles) repository.DatabaseRepository {
 	return &DatabaseImpl{DBObj: db}
 }
 
-func remove(slice *[]Vehicles, slot int) []Vehicles {
-	return append((*slice)[:slot], (*slice)[slot+1:]...)
+func remove(slice *[]Vehicles, slot int) *[]Vehicles {
+	(*slice) = append((*slice)[:slot], (*slice)[slot+1:]...)
+	return slice
+}
+
+func fetchEmptySlot() (string, error) {
+
+	for k, _ := range EmptySlotDB {
+		delete(EmptySlotDB, k)
+		return k, nil
+	}
+	return "", errors.New("no empty slot found")
+}
+
+func addEmptySlot(inputSlot string) {
+
+	EmptySlotDB[inputSlot] = inputSlot
 }

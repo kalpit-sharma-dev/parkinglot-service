@@ -13,6 +13,11 @@ type ParkingLotServiceImpl struct {
 	repository repository.DatabaseRepository
 }
 
+func (s *ParkingLotServiceImpl) CreateSlotEvent(ctx context.Context, req models.Slot) (vehicle models.Slot, err error) {
+	vehicle, err = s.repository.CreateSlotEvent(ctx, req)
+	return
+}
+
 // CreateParkingLot implements ParkingLotService
 func (s *ParkingLotServiceImpl) GetAllCarsWithColor(ctx context.Context, reqColor string) (vehicle []models.Vehicle, err error) {
 	vehicle, err = s.repository.GetAllCarsWithColor(ctx, reqColor)
