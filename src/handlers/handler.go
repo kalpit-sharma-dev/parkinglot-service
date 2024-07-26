@@ -151,7 +151,7 @@ func (h *Handler) HandleExitParkEvent(w http.ResponseWriter, r *http.Request) {
 			ID:      400,
 			Message: constants.NoCarParkedError,
 		}
-		log.Println("error", err)
+		log.Println("error in exit park event", err)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(customError)
 		return

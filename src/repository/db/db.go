@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +26,7 @@ type Vehicles struct {
 	Color     string
 	Number    string
 	Slot      string
+	Model     string
 	CreatedAt time.Time
 }
 
@@ -38,10 +41,11 @@ func init() {
 }
 
 type DatabaseImpl struct {
-	DBObj *[]Vehicles
-	RW    sync.RWMutex
-	Day   map[int]int //key value pair for day and earning
-	Month map[int]int ////key value pair for day and earning
+	DBObj      *[]Vehicles
+	DBmySqlCon *sql.DB
+	RW         sync.RWMutex
+	Day        map[int]int //key value pair for day and earning
+	Month      map[int]int ////key value pair for day and earning
 }
 
 func (db *DatabaseImpl) CreateSlotEvent(ctx context.Context, req models.Slot) (vehicle models.Slot, err error) {
@@ -72,6 +76,7 @@ func (db *DatabaseImpl) GetAllCarsWithColor(ctx context.Context, reqColor string
 				Slot:   value.Slot,
 				Number: value.Number,
 				Color:  value.Color,
+				Model:  value.Model,
 				// /CreatedAt: value.CreatedAt,
 			})
 		}
@@ -88,6 +93,7 @@ func (db *DatabaseImpl) GetSlotNumberWithCarID(ctx context.Context, reqNumber st
 				Slot:   value.Slot,
 				Number: value.Number,
 				Color:  value.Color,
+				Model:  value.Model,
 				//CreatedAt: value.CreatedAt,
 			}
 			db.RW.RUnlock()
@@ -113,17 +119,37 @@ func (db *DatabaseImpl) GetAllSlotNumberWithColor(ctx context.Context, reqColor 
 				Slot:   value.Slot,
 				Number: value.Number,
 				Color:  value.Color,
+				Model:  value.Model,
 				//CreatedAt: value.CreatedAt,
 			})
 		}
 	}
 	db.RW.RUnlock()
+
+	rows, err := db.DBmySqlCon.Query("SELECT car_number,color,model FROM vehicles WHERE color = ?", reqColor)
+	if err != nil {
+		log.Println(err)
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	// Process the results
+	for rows.Next() {
+		var id int
+		var name string
+		if err := rows.Scan(&vehicle); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ID: %d, Name: %s\n", id, name)
+	}
+
 	return
 
 }
 
 func (db *DatabaseImpl) CreateParkEvent(ctx context.Context, req models.Vehicle) (vehicle models.Vehicle, err error) {
 
+	fmt.Println("CreateParkEvent  |  Insert user into the database")
 	db.RW.Lock()
 	latestEmptySlot, err := fetchEmptySlot()
 
@@ -137,6 +163,7 @@ func (db *DatabaseImpl) CreateParkEvent(ctx context.Context, req models.Vehicle)
 		Number:    req.Number,
 		Slot:      latestEmptySlot,
 		CreatedAt: time.Now(),
+		Model:     req.Model,
 	}
 
 	*db.DBObj = append(*db.DBObj, value)
@@ -146,15 +173,31 @@ func (db *DatabaseImpl) CreateParkEvent(ctx context.Context, req models.Vehicle)
 	vehicle.Color = value.Color
 	vehicle.Number = value.Number
 	vehicle.Slot = value.Slot
+	vehicle.Model = value.Model
+	// Insert slots into the database
+	fmt.Println(" Insert slots into the database")
+	_, err = db.DBmySqlCon.Exec("INSERT INTO slots (slot_number,car_number) VALUES (?,?)", value.Slot, value.Number)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	// Insert vehicles into the database
+	fmt.Println(" Insert vehicles into the database")
+	_, err = db.DBmySqlCon.Exec("INSERT INTO vehicles (car_number,color,model) VALUES (?,?,?)", value.Number, value.Color, value.Model)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	return
 }
 
 func (db *DatabaseImpl) ExitParkEvent(ctx context.Context, req models.Vehicle) (models.Vehicle, error) {
-
+	flag := false
 	var vehicle models.Vehicle
 	db.RW.Lock()
 	for index, value := range *db.DBObj {
 		if value.Number == req.Number {
+			flag = true
 			delete(SlotDB, req.Slot)
 			addEmptySlot(req.Slot)
 			db.DBObj = remove(db.DBObj, index)
@@ -162,19 +205,34 @@ func (db *DatabaseImpl) ExitParkEvent(ctx context.Context, req models.Vehicle) (
 			vehicle.Color = value.Color
 			vehicle.Number = value.Number
 			vehicle.Slot = value.Slot
-			db.RW.Unlock()
-			return vehicle, nil
+			vehicle.Model = value.Model
 		}
 	}
 	db.RW.Unlock()
-	err := errors.New(constants.NoCarParkedError)
-	return vehicle, err
+	if flag {
+		fmt.Println("INSIDE DELETE FROM TABLE SLOTS VEHICLES")
+		_, err := db.DBmySqlCon.Exec("Delete From slots where car_number = ?", req.Number)
+		if err != nil {
+			log.Println(err)
+			return vehicle, err
+		}
+		_, err = db.DBmySqlCon.Exec("Delete From vehicles where car_number = ?", req.Number)
+		if err != nil {
+			log.Println(err)
+			return vehicle, err
+		}
+	}
+
+	if !flag {
+		return vehicle, errors.New(constants.NoCarParkedError)
+	}
+	return vehicle, nil
 }
 
 // NewRepository returns instance of Database repository
-func NewDatabaseRepository(db *[]Vehicles) repository.DatabaseRepository {
+func NewDatabaseRepository(db *[]Vehicles, dbmySqlCon *sql.DB) repository.DatabaseRepository {
 
-	return &DatabaseImpl{DBObj: db}
+	return &DatabaseImpl{DBObj: db, DBmySqlCon: dbmySqlCon}
 }
 
 func remove(slice *[]Vehicles, slot int) *[]Vehicles {

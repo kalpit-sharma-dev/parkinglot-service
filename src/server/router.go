@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/kalpit-sharma-dev/parkinglot-service/src/service"
 
 	"github.com/gorilla/mux"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 func LoadRoute() {
@@ -30,12 +33,24 @@ func registerAppRoutes(r *mux.Router) {
 
 	log.Println("INFO : Registering Router ")
 
+	var err error
+	// Connect to MySQL database
+	dbmySqlCon, err := sql.Open("mysql", "kalpit:password@tcp(192.168.100.4:3306)/demo")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Test database connection
+	if err := dbmySqlCon.Ping(); err != nil {
+		log.Fatal(err)
+	}
+
 	var dbConn db.DatabaseImpl
 
 	vehicleDB := make([]db.Vehicles, 1)
 	dbConn.DBObj = &vehicleDB
 
-	eventRepo := db.NewDatabaseRepository(dbConn.DBObj)
+	eventRepo := db.NewDatabaseRepository(dbConn.DBObj, dbmySqlCon)
 
 	eventService := service.NewParkingLotService(eventRepo)
 
